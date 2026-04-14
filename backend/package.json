@@ -1,0 +1,61 @@
+{
+  "name": "scalecart",
+  "version": "1.0.0",
+  "description": "e-commerce",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch --env-file=src/.env src/index.ts",
+    "watch": "tsc -w"
+  },
+  "keywords": [
+    "node",
+    "dev"
+  ],
+  "author": "SHIVANSH",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.3",
+    "cloudinary": "^2.5.1",
+    "cloudinary-build-url": "^0.2.4",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "google-auth-library": "^9.15.1",
+    "ioredis": "^5.10.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "mongoose-aggregate-paginate-v2": "^1.1.3",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.10.0",
+    "passport": "^0.7.0",
+    "passport-facebook": "^3.0.0",
+    "passport-google-oauth20": "^2.0.0",
+    "razorpay": "^2.9.6"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/body-parser": "^1.19.5",
+    "@types/cookie-parser": "^1.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.23",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^1.4.13",
+    "@types/node": "^20.11.24",
+    "@types/nodemailer": "^6.4.14",
+    "@types/passport": "^1.0.16",
+    "@types/passport-facebook": "^2.1.11",
+    "@types/passport-google-oauth20": "^2.0.14",
+    "nodemon": "^3.1.9",
+    "prettier": "^3.4.2",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.3"
+  }
+}
