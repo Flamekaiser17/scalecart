@@ -34,7 +34,7 @@ const cartSchema = new Schema<ICart>({
             required: true
         }
     }]
-}, { timestamps: true });
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
 cartSchema.virtual('totalAmount').get(function(this: ICart) {
     return this.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);

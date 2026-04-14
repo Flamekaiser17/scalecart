@@ -1,0 +1,46 @@
+[
+  {
+    "name": "Clothes",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-clothes-50.png"
+  },
+  {
+    "name": "Shoes",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-shoes-50.png"
+  },
+  {
+    "name": "Electronics",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-electronics-50.png"
+  },
+  {
+    "name": "Cosmetics",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-cosmetics-50.png"
+  },
+  {
+    "name": "Jewelry",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-jewelry-50.png"
+  },
+  {
+    "name": "Watches",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-watches-50.png"
+  },
+  {
+    "name": "Home Appliances",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-appliances-50.png"
+  },
+  {
+    "name": "Toys",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-toy-car-48.png"
+  },
+  {
+    "name": "Books",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-books-50.png"
+  },
+  {
+    "name": "Sports",
+    "icon": "c:\\Users\\astit\\Downloads\\icons8-track-and-field-skin-type-1-22-48.png"
+  },
+  {
+    "name": "Groceries",
+    "icon": "https://res.cloudinary.com/demo/image/upload/v1234567890/icons/groceries.png"
+  }
+]
