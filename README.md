@@ -1,156 +1,303 @@
 <div align="center">
   <img src="https://static-assets-web.flixcart.com/fk-p-linchpin-web/fk-cp-zion/img/flipkart-plus_8d85f4.png" alt="ScaleCart Logo" width="150" />
   <h1>ScaleCart</h1>
-  <p><strong>A Production-Grade E-Commerce Platform | Flipkart Clone Architecture</strong></p>
+  <p><strong>A Production-Grade E-Commerce Platform · Flipkart-Inspired Architecture</strong></p>
   
-  [![React](https://img.shields.io/badge/React-19-blue.svg?style=flat-square&logo=react)](https://reactjs.org/)
-  [![Node.js](https://img.shields.io/badge/Node.js-Express-green.svg?style=flat-square&logo=node.js)](https://nodejs.org/)
-  [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Prisma-336791.svg?style=flat-square&logo=postgresql)](https://postgresql.org/)
-  [![Redis](https://img.shields.io/badge/Redis-Upstash-DC382D.svg?style=flat-square&logo=redis)](https://redis.io/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-Standard-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+  [![Live Demo](https://img.shields.io/badge/Live-scalecart.vercel.app-blue?style=flat-square&logo=vercel)](https://scalecart.vercel.app)
+  [![API](https://img.shields.io/badge/API-scalecart.onrender.com-green?style=flat-square&logo=render)](https://scalecart.onrender.com/api/v1)
+  
+  [![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat-square&logo=react)](https://reactjs.org/)
+  [![Node.js](https://img.shields.io/badge/Node.js-Express-339933.svg?style=flat-square&logo=node.js)](https://nodejs.org/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-Backend-3178C6.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+  [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-336791.svg?style=flat-square&logo=postgresql)](https://supabase.com/)
+  [![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748.svg?style=flat-square&logo=prisma)](https://www.prisma.io/)
+  [![Redis](https://img.shields.io/badge/Redis-Upstash-DC382D.svg?style=flat-square&logo=redis)](https://upstash.com/)
 </div>
 
 <br />
 
-ScaleCart is a highly scalable, full-stack e-commerce application designed to replicate the **UI/UX of Flipkart** while demonstrating **FAANG-level backend architecture**. It features a fully normalized PostgreSQL database, atomic transactions for checkout, Redis cache-aside strategies, and an integrated Natural Language Processing (NLP) search engine.
+ScaleCart is a full-stack e-commerce application built to replicate **Flipkart's UI/UX** while implementing **production-grade backend patterns**. The system features a **12-table normalized PostgreSQL schema**, **ACID-compliant transactional checkout**, **Redis cache-aside caching**, **NLP-powered search filtering**, and **real-time PDF invoice generation with email delivery**.
 
 ---
 
-## Key Highlights
+## 🌐 Live Demo
 
-- **ElasticSearch-Style NLP Filtering:** Queries like _"laptops under 100000"_ or _"phones above 20000"_ are dynamically parsed and converted into `Prisma` range metrics without the overhead of heavy third-party indexing engines.
-- **Atomic Transactions:** Order placement utilizes strict ACID-compliant transactions across multiple tables—stock is atomically decremented, the cart is cleared, and the order is generated simultaneously.
-- **PostgreSQL strict Normalization:** Transitioned from a legacy loose MongoDB structure to a rigid **10-table relational schema** using Prisma ORM.
-- **Cache-Aside Pattern:** Redis aggressively caches product reads and invalidates caches intelligently on transactional stock mutations.
-- **Automated Invoicing:** Professional PDF invoices are generated server-side using `pdfkit` and securely delivered via Nodemailer (Gmail SMTP).
+> **Frontend:** [https://scalecart.vercel.app](https://scalecart.vercel.app)  
+> **Backend API:** [https://scalecart.onrender.com/api/v1](https://scalecart.onrender.com/api/v1)
+
+### Demo Credentials
+
+| Field | Value |
+|:---|:---|
+| **Email** | `rajputsinghshiv17@gmail.com` |
+| **Password** | `1234` |
+
+> [!NOTE]
+> Render free-tier backends cold-start after inactivity. The first API call may take ~30s — subsequent requests are instant.
 
 ---
 
-## System Architecture
+## ✨ Key Highlights
 
-### Entity Relationship Diagram (Prisma)
-A strictly separated Domain-Driven schema enforcing data integrity and cascading relational actions.
+| Feature | Implementation |
+|:---|:---|
+| **Full-Text Search + NLP Parsing** | Native PostgreSQL Full-Text Search (`tsvector`, `ts_rank`) is combined with NLP regex parsing. Queries like _"laptops under 50000"_ are converted into Ranked FTS matches + Prisma range filters (`price: { lte: 50000 }`) — providing ElasticSearch-like capabilities with zero extra infrastructure overhead. |
+| **Atomic Checkout** | Order placement uses `prisma.$transaction()` — stock validation, order creation, inventory decrement, and cart clearing all execute atomically. If any step fails, everything rolls back. |
+| **Cache-Aside Pattern** | Product reads hit Redis first (TTL: 30min–1hr). On cache miss, PostgreSQL is queried and the result is cached. Write operations (order placement, product updates) invalidate relevant cache keys. |
+| **PDF Invoice Generation** | Server-side PDF invoices are generated using `pdfkit` and attached to confirmation emails via Nodemailer (Gmail SMTP). |
+| **Secure Price Computation** | Cart prices are computed server-side from the Product table — the client cannot inject manipulated prices. Discounted price = `price - (price × discount / 100)`. |
+| **12-Table Relational Schema** | Fully normalized PostgreSQL schema: User, Product, ProductImage, Category, Brand, Cart, CartItem, Order, OrderItem, Address, Review, Wishlist. |
+
+---
+
+## 🏗️ System Architecture
+
+### Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    USER ||--|{ ORDER : places
     USER ||--|| CART : owns
+    USER ||--|{ ORDER : places
     USER ||--|{ ADDRESS : saves
     USER ||--|{ WISHLIST : maintains
+    USER ||--|{ REVIEW : writes
     CART ||--|{ CART_ITEM : contains
     ORDER ||--|{ ORDER_ITEM : entails
     PRODUCT ||--|{ CART_ITEM : "added as"
     PRODUCT ||--|{ ORDER_ITEM : "billed as"
+    PRODUCT ||--|{ PRODUCT_IMAGE : has
+    PRODUCT ||--|{ REVIEW : receives
+    PRODUCT ||--|{ WISHLIST : "wishlisted in"
     CATEGORY ||--|{ PRODUCT : categorizes
     BRAND ||--|{ PRODUCT : manufactures
 
     USER {
         string id PK
         string email UK
+        string username UK
         string password
+        string refreshToken
+        boolean isVerified
     }
     PRODUCT {
         string id PK
+        string name
         float price
-        int stock
         float discount
+        int stock
+        float rating
     }
     ORDER {
         string id PK
         string status
         float totalAmount
-        string shippingAddress
+        string paymentStatus
+    }
+    CART {
+        string id PK
+        string userId FK
+        float totalAmount
     }
 ```
 
-### High-Level Request Flow
+### Request Flow — Search with Caching
+
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend
-    participant Redis
-    participant PostgreSQL
-    
-    User->>Frontend: Searches "laptop under 50000"
-    Frontend->>Redis: GET /api/v1/products?search=...
+    participant React as React Frontend
+    participant Express as Express API
+    participant Redis as Redis Cache
+    participant PG as PostgreSQL
+
+    User->>React: Searches "laptop under 50000"
+    React->>Express: GET /api/v1/products?search=laptop+under+50000
+    Express->>Redis: GET cache key
     alt Cache Hit
-        Redis-->>Frontend: Return Data (O(1))
+        Redis-->>Express: Return cached payload
     else Cache Miss
-        Redis->>PostgreSQL: Prisma query NLP parsing
-        Note right of PostgreSQL: price: { lte: 50000 }, name: { contains: "laptop" }
-        PostgreSQL-->>Redis: SET EX 3600 payload
-        Redis-->>Frontend: Return Data
+        Express->>Express: NLP regex parsing
+        Note right of Express: name: { contains: "laptop" }<br/>price: { lte: 50000 }
+        Express->>PG: Prisma findMany with filters
+        PG-->>Express: Query results
+        Express->>Redis: SETEX (TTL 3600s)
     end
-    Frontend-->>User: Render Grid View
+    Express-->>React: JSON response
+    React-->>User: Render product grid
+```
+
+### Checkout Transaction Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API as Express API
+    participant TX as Prisma $transaction
+    participant PG as PostgreSQL
+    participant Email as Nodemailer + PDFKit
+
+    User->>API: POST /api/v1/orders/checkout
+    API->>TX: Begin atomic transaction
+    TX->>PG: Fetch cart + validate stock
+    TX->>PG: Create Order + OrderItems
+    TX->>PG: Decrement product stock
+    TX->>PG: Clear CartItems
+    TX-->>API: Transaction committed
+    API->>Email: Fire-and-forget email
+    Note right of Email: HTML confirmation + PDF invoice attachment
+    API-->>User: 201 Order placed
 ```
 
 ---
 
-## Testing the Application 
+## 🛠️ Technology Stack
 
-### Quick Demo Credentials (Evaluators Use This)
-To test the purchasing, checkout, and cart capabilities quickly, use the seeded default user:
-- **Email:** `rajputsinghshiv17@gmail.com`
-- **Password:** `password123`
+| Layer | Technology | Purpose |
+|:---|:---|:---|
+| **Frontend** | React 19, Vite, TailwindCSS | SPA with Flipkart-inspired UI, responsive 2→5 column product grid, banner carousel |
+| **Backend** | Node.js, Express, TypeScript | Type-safe REST API with layered architecture (Routes → Controllers → Middleware → Utils) |
+| **Database** | PostgreSQL (Supabase) | 12-table normalized schema with referential integrity and cascading deletes |
+| **ORM** | Prisma | Type-safe queries, migrations, atomic transactions, relation management |
+| **Caching** | Redis (Upstash) | Cache-aside pattern for product/category reads with intelligent invalidation |
+| **Auth** | JWT (HTTP-Only Cookies) | Access + Refresh token strategy with `sameSite: none` for cross-domain deployment |
+| **File Storage** | Cloudinary + Multer | Image upload pipeline — Multer handles multipart, Cloudinary stores/serves media |
+| **Email** | Nodemailer (Gmail SMTP) | Transactional emails — welcome email on registration, order confirmation with PDF invoice |
+| **Payments** | Razorpay (test mode) | Payment gateway integration for order processing |
+| **State** | React Context API | Client-side cart and wishlist state synchronized with backend |
 
-### Or Local Startup
+---
+
+## 📁 Project Structure
+
+```
+scalecart/
+├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma          # 12-model PostgreSQL schema
+│   │   └── seed.ts                # Seeds 100 products from DummyJSON API
+│   ├── src/
+│   │   ├── controllers/           # Business logic (11 controllers)
+│   │   │   ├── user.controllers.ts
+│   │   │   ├── product.controllers.ts
+│   │   │   ├── cart.controllers.ts
+│   │   │   ├── order.controllers.ts
+│   │   │   ├── wishlist.controllers.ts
+│   │   │   ├── payment.controllers.ts
+│   │   │   └── ...
+│   │   ├── middlewares/
+│   │   │   ├── auth.middlewares.ts # JWT verification (cookie + Bearer)
+│   │   │   └── multer.middlewares.ts
+│   │   ├── routes/                # Express route definitions (11 files)
+│   │   ├── utils/
+│   │   │   ├── redis.ts           # Cache-aside helpers
+│   │   │   ├── sendEmail.ts       # Email + PDF invoice generation
+│   │   │   ├── cloudinary.ts      # Image upload utility
+│   │   │   ├── apiError.ts        # Custom error class
+│   │   │   ├── apiResponse.ts     # Standardized response wrapper
+│   │   │   └── asyncHandler.ts    # Express async error wrapper
+│   │   ├── app.ts                 # Express app config (CORS, routes, error handler)
+│   │   └── index.ts               # Server entry point
+│   ├── .env.example
+│   └── package.json
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Navbar.jsx         # Flipkart-style header with category dropdowns
+│   │   │   ├── ProductCard.jsx    # Product tile with wishlist toggle
+│   │   │   ├── AuthModal.jsx      # Login/Register modal
+│   │   │   └── Loader.jsx         # Skeleton loader
+│   │   ├── pages/
+│   │   │   ├── Home.jsx           # Banner carousel + product grid + NLP search
+│   │   │   ├── ProductDetail.jsx  # Image carousel + stock badge + add to cart
+│   │   │   ├── Cart.jsx           # Cart management with quantity controls
+│   │   │   ├── Checkout.jsx       # Address selection + order placement
+│   │   │   ├── Orders.jsx         # Order history
+│   │   │   ├── Wishlist.jsx       # Saved items
+│   │   │   ├── Profile.jsx        # User profile + address management
+│   │   │   └── OrderSuccess.jsx   # Post-checkout confirmation
+│   │   ├── context/
+│   │   │   ├── CartContext.jsx     # Cart state + API sync
+│   │   │   └── WishlistContext.jsx # Wishlist state + API sync
+│   │   ├── services/
+│   │   │   └── api.js             # Axios instance with all API calls
+│   │   └── App.jsx                # Router + layout
+│   ├── .env.production
+│   └── package.json
+│
+└── README.md
+```
+
+---
+
+## 🔐 Security & Anti-Fraud Measures
+
+| Measure | Implementation |
+|:---|:---|
+| **Server-Side Price Enforcement** | `addToCart` controller fetches the product from PostgreSQL and computes `securePrice = price - (price × discount / 100)`. Client-sent prices are ignored. |
+| **Race Condition Prevention** | The checkout engine wraps stock validation + decrement inside `prisma.$transaction()`. Two concurrent purchases of the last unit will serialize — the second is rejected with "Insufficient stock". |
+| **Token Security** | JWTs are stored in `httpOnly` cookies (inaccessible to JavaScript/XSS). Cross-domain cookie delivery uses `secure: true` + `sameSite: "none"`. |
+| **CORS Hardening** | Dynamic origin validation — only `scalecart.vercel.app`, `localhost:5173`, and `*.vercel.app` preview URLs are allowed. No wildcard `*` with credentials. |
+| **Input Validation** | Required fields are validated in controllers before any DB operation. Stock bounds are checked before cart additions. |
+
+---
+
+## 🖥️ Local Development Setup
+
 ```bash
 # 1. Clone the repository
-git clone <your-repo>
+git clone <your-repo-url>
 cd scalecart
 
 # 2. Install dependencies
 cd backend && npm install
 cd ../frontend && npm install
 
-# 3. Apply Schema & Seed Database (Terminal 1)
+# 3. Configure environment
+cp backend/.env.example backend/.env
+# Fill in your PostgreSQL, Redis, Cloudinary, and SMTP credentials
+
+# 4. Initialize the database
 cd backend
-npx prisma db push
 npx prisma generate
-npx prisma db seed
+npx prisma db push
+npx prisma db seed    # Seeds 100 products from DummyJSON API
 
-# 4. Start Backend Server
-npm run dev
+# 5. Start backend (Terminal 1)
+npm run dev            # → http://localhost:8000
 
-# 5. Start Frontend React Server (Terminal 2)
+# 6. Start frontend (Terminal 2)
 cd frontend
-npm run dev
+npm run dev            # → http://localhost:5173
 ```
-> **Access Frontend**: `http://localhost:5173`
-> **Access API**: `http://localhost:8000`
 
 ---
 
-## Technology Stack
+## 📊 API Endpoints Overview
 
-| Domain | Technology / Approach | Reasoning |
-| :--- | :--- | :--- |
-| **Frontend** | React 19, Vite, TailwindCSS | Component modularity. Replicated exact Flipkart structural DOM. |
-| **Backend** | Node.js, Express, TypeScript | Type-safe business logic, robust asynchronous error-handling layers. |
-| **Database** | PostgreSQL (Supabase), Prisma V7 | Strict referential integrity, eliminating orphan records via absolute Constraints. |
-| **Caching** | Redis (Upstash) | Offloaded repeated Product/Category reads, achieving <50ms response metrics. |
-| **Auth/State** | JWT (HTTP-Only Cookies), React Context | Secured session management preventing localized XSS. |
-| **File Auth** | Cloudinary & Multer | Efficient media transit and transformation before storage. |
+| Method | Endpoint | Auth | Description |
+|:---|:---|:---|:---|
+| `POST` | `/api/v1/users/register` | ✗ | Register new user |
+| `POST` | `/api/v1/users/login` | ✗ | Login (sets JWT cookies) |
+| `POST` | `/api/v1/users/logout` | ✔ | Logout (clears cookies) |
+| `GET` | `/api/v1/users/profile` | ✔ | Get user profile |
+| `PUT` | `/api/v1/users/profile` | ✔ | Update profile |
+| `GET` | `/api/v1/products` | ✗ | List products (search, filter, pagination) |
+| `GET` | `/api/v1/products/:id` | ✗ | Get single product |
+| `GET` | `/api/v1/categories/categories` | ✗ | List all categories |
+| `GET` | `/api/v1/cart` | ✔ | Get user's cart |
+| `POST` | `/api/v1/cart/add` | ✔ | Add item to cart |
+| `PUT` | `/api/v1/cart/update` | ✔ | Update cart item quantity |
+| `DELETE` | `/api/v1/cart/remove` | ✔ | Remove item from cart |
+| `POST` | `/api/v1/orders/checkout` | ✔ | Place order (atomic transaction) |
+| `GET` | `/api/v1/orders` | ✔ | Get order history |
+| `GET` | `/api/v1/wishlist` | ✔ | Get wishlist |
+| `POST` | `/api/v1/wishlist/toggle` | ✔ | Toggle wishlist item |
+| `GET` | `/api/v1/users/addresses` | ✔ | List saved addresses |
+| `POST` | `/api/v1/users/address` | ✔ | Add new address |
 
 ---
 
-## Deliverable Checklist Status
-
-| Parameter | Implemented Mechanics | Rating Focus |
-| :--- | :--- | :--- |
-| **Product Listing** | 5-Column adaptive grid, Sub-nav dropdown routing, NLP filtering logic. | `Functionality` & `UI/UX` |
-| **Detail Page** | Carousel mappings, intelligent stock badge calculations, 16% markup discounts. | `UI/UX` & `Code Modularity` |
-| **Cart Operations** | Atomic sync with local context + DB persistence. Per-item math isolation. | `Functionality` |
-| **Checkout Workflow** | Pin-code autostates, dynamic free-delivery computations, Email confirmations with PDF attachments. | `Functionality` & `Design` |
-| **Code Modularity** | Separated Route, Controller, Middleware, Utils pattern on REST architecture. | `Code Modularity` |
-| **Database Quality** | Prisma typed schemas over Mongo loose schema, with strict atomic constraints mapping dummy-data seamlessly. | `Database Design` |
-
----
-
-## Advanced Security & Anti-Fraud Measures
-
-- **No Client Price Trust:** You cannot manipulate DOM payload to buy a 1 Lakh laptop for ₹1. The Cart Controller computes prices strictly against the PostgreSQL product entry at runtime.
-- **Race Condition Prevention:** The checkout engine wraps stock reductions in a transaction. Two concurrent hits attempting to buy the final 1 unit will sequentially resolve, rejecting the second.
-- **Clean Fallbacks:** Unreachable external imagery (origin blocking) is automatically caught by synthetic CSS gradients or reliable alternative placeholder mechanisms ensuring the UI never physically breaks.
-
-<p align="center">Built as an intensive engineering demonstration of scalable e-commerce systems.</p>
+<p align="center">
+  <strong>Built as a production-grade engineering demonstration of scalable e-commerce systems.</strong>
+</p>

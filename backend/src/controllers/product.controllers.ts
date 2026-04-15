@@ -8,7 +8,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 const PRODUCT_CACHE_TTL = 1800;
 const PRODUCTS_CACHE_TTL = 3600;
 
-// ─── GET ALL PRODUCTS (Search, Filter, Pagination, Redis Cache) ───────────────
+// ─── GET ALL PRODUCTS (PostgreSQL Full-Text Search, NLP Filters, Redis Cache) ─
 export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   const { search, category, page = 1, limit = 10 } = req.query;
   const cacheKey = `products:${JSON.stringify(req.query)}`;
@@ -24,6 +24,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   const skip = (Number(page) - 1) * Number(limit);
 
   const where: any = {};
+  let ftsProductIds: string[] | null = null;
   
   if (search) {
     let rawSearch = search as string;
@@ -45,9 +46,36 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
       priceFilter = { gte: Number(aboveMatch[2]) };
     }
 
-    // Replace the search query text but only if there is a remaining product term
+    // ─── PostgreSQL Full-Text Search with relevance ranking ───────────────
     if (rawSearch) {
-      where.name = { contains: rawSearch, mode: "insensitive" };
+      try {
+        // Step 1: Use FTS to get ranked product IDs
+        // websearch_to_tsquery supports natural language: "wireless headphones" → 'wireless' & 'headphone'
+        const ftsResults = await prisma.$queryRaw<{ id: string; rank: number }[]>`
+          SELECT id, ts_rank(
+            to_tsvector('english', name || ' ' || COALESCE(description, '')),
+            websearch_to_tsquery('english', ${rawSearch})
+          ) as rank
+          FROM "Product"
+          WHERE to_tsvector('english', name || ' ' || COALESCE(description, ''))
+                @@ websearch_to_tsquery('english', ${rawSearch})
+          ORDER BY rank DESC
+        `;
+
+        if (ftsResults.length > 0) {
+          ftsProductIds = ftsResults.map(r => r.id);
+          where.id = { in: ftsProductIds };
+          console.log(`FTS matched ${ftsResults.length} products for "${rawSearch}"`);
+        } else {
+          // Fallback: ILIKE for partial matches (e.g., "lapt" won't match FTS but matches ILIKE)
+          console.log(`FTS: no results for "${rawSearch}", falling back to ILIKE`);
+          where.name = { contains: rawSearch, mode: "insensitive" };
+        }
+      } catch (ftsError: any) {
+        // If FTS query fails (e.g., invalid syntax), gracefully fallback to ILIKE
+        console.log(`FTS error: ${ftsError.message}, falling back to ILIKE`);
+        where.name = { contains: rawSearch, mode: "insensitive" };
+      }
     }
     
     // Apply parsed price boundaries to Prisma query
@@ -70,13 +98,21 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
         category: { select: { id: true, name: true } },
         images: { select: { url: true } },
       },
-      orderBy: { createdAt: "desc" },
+      // If FTS returned ranked IDs, preserve that relevance order
+      ...(ftsProductIds ? {} : { orderBy: { createdAt: "desc" } }),
     }),
     prisma.product.count({ where }),
   ]);
 
+  // If FTS was used, sort by FTS rank order (Prisma doesn't support ORDER BY FIELD)
+  let sortedProducts = products;
+  if (ftsProductIds && ftsProductIds.length > 0) {
+    const rankMap = new Map(ftsProductIds.map((id, idx) => [id, idx]));
+    sortedProducts = [...products].sort((a, b) => (rankMap.get(a.id) ?? 999) - (rankMap.get(b.id) ?? 999));
+  }
+
   // Normalize: flatten images array to match frontend expectation
-  const normalized = products.map((p) => ({
+  const normalized = sortedProducts.map((p) => ({
     ...p,
     _id: p.id,
     brandId: p.brand,
