@@ -34,10 +34,11 @@ export const CartProvider = ({ children }) => {
       if (cartData && cartData.items) {
         const formattedItems = cartData.items.map(item => ({
           productId: item.productId?._id || item.productId,
-          name: item.productId?.name || 'Unknown Item',
-          image: item.productId?.images?.[0] || 'https://via.placeholder.com/150',
-          price: item.price,
-          quantity: item.quantity,
+          name:      item.productId?.name || 'Unknown Item',
+          image:     item.productId?.images?.[0] || 'https://via.placeholder.com/150',
+          price:     item.price,
+          quantity:  item.quantity,
+          stock:     item.productId?.stock ?? 10, // carry stock so Cart can cap the + button
         }));
         setCartItems(formattedItems);
       } else {

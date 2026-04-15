@@ -99,16 +99,22 @@ const seedDatabase = async () => {
       );
       const matchedBrand = savedBrands.find((b) => b.name === brandName);
 
+      // Merge thumbnail + images array, deduplicate, ensure ≥1 image
+      const allImages: string[] = [
+        ...(item.thumbnail ? [item.thumbnail] : []),
+        ...(item.images || []),
+      ];
+      // Remove duplicates (thumbnail is sometimes same as images[0])
+      const uniqueImages = [...new Set(allImages)];
+
       return {
         name:        item.title,
         description: item.description,
-        // Convert USD → INR (approx ×83), round to nearest whole number
         price:       Math.round(item.price * 83),
-        // Use DummyJSON discount directly
         discount:    Math.round(item.discountPercentage) || 0,
         stock:       item.stock,
         rating:      item.rating,
-        images:      item.images,
+        images:      uniqueImages,          // now has thumbnail + all images
         categoryId:  matchedCategory?._id,
         brandId:     matchedBrand?._id,
         reviews:     [],
