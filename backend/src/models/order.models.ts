@@ -5,7 +5,7 @@ export type PaymentStatus = "Pending" | "Paid" | "Failed";
 
 export interface IOrder extends Document {
     userId: mongoose.Types.ObjectId;
-    items: mongoose.Types.ObjectId[];
+    items: { productId: mongoose.Types.ObjectId; quantity: number; price: number }[];
     orderDate: Date;
     shippingDate: Date;
     status: OrderStatus;
@@ -23,8 +23,20 @@ const orderSchema = new Schema<IOrder>({
         required: true,
     },
     items: [{
-        type: Schema.Types.ObjectId,
-        ref: "Product",
+        productId: {
+            type: Schema.Types.ObjectId,
+            ref: "Product",
+            required: true
+        },
+        quantity: {
+            type: Number,
+            required: true,
+            min: 1
+        },
+        price: {
+            type: Number,
+            required: true
+        }
     }],
     orderDate: {
         type: Date,

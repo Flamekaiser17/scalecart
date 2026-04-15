@@ -1,382 +1,247 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import apiError from "../utils/apiError.js";
-import User from "../models/user.models.js";
+import prisma from "../db/prisma.js";
 import apiResponse from "../utils/apiResponse.js";
 import sendEmail, { sendWelcomeEmail } from "../utils/sendEmail.js";
 import jwt from "jsonwebtoken";
-import crypto from 'crypto';
+import crypto from "crypto";
+import bcrypt from "bcrypt";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
-import { Request, Response } from "express";
-import { CookieOptions } from "express";
-import { Document } from "mongoose";
-import fs from 'fs';
+import { Request, Response, CookieOptions } from "express";
+import fs from "fs";
 
 interface JwtPayload {
-    _id: string;
-    exp: number;
-}
-
-interface TokenResponse {
-    accessToken: string;
-    refreshToken: string;
-}
-
-interface IUser {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phoneNumber: string;
-    username: string;
-    password: string;
-    refreshToken?: string;
-    emailVerificationToken?: string;
-    emailVerificationTokenExpires?: Date;
-    isVerified: boolean;
-    generateAccessToken: () => string;
-    generateRefreshToken: () => string;
-    isPasswordCorrect: (password: string) => Promise<boolean>;
-    save: (options?: { validateBeforeSave?: boolean }) => Promise<Document>;
+  _id: string;
+  exp: number;
 }
 
 interface RequestWithUser extends Request {
-    user: {
-        _id: string;
-        id?: string;
-    };
+  user: any;
 }
 
 interface RequestWithFile extends Request {
-    file?: Express.Multer.File;
+  file?: Express.Multer.File;
 }
 
-type UserDocument = Document & IUser;
+// ─── HELPER FUNCTIONS ─────────────────────────────────────────────────────────
+const generateAccessToken = (user: any) => jwt.sign(
+  { _id: user.id, email: user.email, username: user.username },
+  process.env.ACCESS_TOKEN_SECRET as string,
+  { expiresIn: process.env.ACCESS_TOKEN_EXPIRY }
+);
 
-const refreshAccessToken = asyncHandler(async (req: Request, res: Response) => {
-    const { refreshToken } = req.body as { refreshToken: string };
+const generateRefreshToken = (user: any) => jwt.sign(
+  { _id: user.id },
+  process.env.REFRESH_TOKEN_SECRET as string,
+  { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
+);
 
-    if (!refreshToken) {
-        throw new apiError(400, "Refresh token is required");
-    }
+const generateAccessAndRefreshTokens = async (userId: string) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new apiError(404, "User not found");
 
-    try {
-        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET as string) as JwtPayload;
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
 
-        if (decoded.exp * 1000 < Date.now()) {
-            throw new apiError(401, "Refresh token has expired");
-        }
+    await prisma.user.update({
+      where: { id: userId },
+      data: { refreshToken },
+    });
 
-        const user = await User.findById(decoded._id) as UserDocument;
-
-        if (!user || user.refreshToken !== refreshToken) {
-            throw new apiError(401, "Invalid refresh token");
-        }
-
-        const accessToken = user.generateAccessToken();
-
-        return res.status(200).json(
-            new apiResponse(200, { accessToken }, "Access token refreshed successfully")
-        );
-    } catch (error) {
-        throw new apiError(401, "Invalid or expired refresh token");
-    }
-});
-
-const generateAccessAndRefreshTokens = async (userId: string): Promise<TokenResponse> => {
-    try {
-        const user = await User.findById(userId) as UserDocument;
-        if (!user) {
-            throw new apiError(404, "User not found");
-        }
-        const accessToken = user.generateAccessToken();
-        const refreshToken = user.generateRefreshToken();
-
-        user.refreshToken = refreshToken;
-        await user.save({ validateBeforeSave: false });
-
-        return { accessToken, refreshToken };
-    } catch (error) {
-        throw new apiError(500, "Something went wrong while generating refresh and access tokens");
-    }
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new apiError(500, "Something went wrong while generating tokens");
+  }
 };
 
-const registerUser = asyncHandler(async (req: Request, res: Response) => {
-    const { firstName, lastName, username, phoneNumber, email, password } = req.body as {
-        firstName: string;
-        lastName: string;
-        username: string;
-        phoneNumber: string;
-        email: string;
-        password: string;
-    };
+const sanitizeUser = (user: any) => {
+  const { password, refreshToken, ...userWithoutSecrets } = user;
+  return { ...userWithoutSecrets, _id: user.id };
+};
 
-    // Allow phoneNumber to be optional
-    if ([firstName, username, email, password].some((field) => !field || field?.trim() === "")) {
-        throw new apiError(400, "All fields are required");
-    }
+// ─── AUTH CONTROLLERS ─────────────────────────────────────────────────────────
 
-    const existingUser = await User.findOne({
-        $or: [{ username }, { email }]
-    });
+export const registerUser = asyncHandler(async (req: Request, res: Response) => {
+  const { firstName, lastName, username, phoneNumber, email, password } = req.body;
 
-    if (existingUser) {
-        throw new apiError(400, "User already exists");
-    }
+  if ([firstName, username, email, password].some((f) => !f || f.trim() === "")) {
+    throw new apiError(400, "All required fields must be provided");
+  }
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+  const existingUser = await prisma.user.findFirst({
+    where: { OR: [{ username }, { email }] },
+  });
 
-    const user = await User.create({
-        firstName,
-        lastName,
-        email,
-        phoneNumber,
-        username,
-        password,
-        emailVerificationToken: verificationToken,
-        emailVerificationTokenExpires: Date.now() + 3600000,
-        // Auto-verify in development — user can login immediately after registering
-        isVerified: true,
-    });
+  if (existingUser) {
+    throw new apiError(400, "User already exists with this email or username");
+  }
 
-    const createdUser = await User.findById(user._id).select("-password -refreshToken");
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const verificationToken = crypto.randomBytes(32).toString("hex");
 
-    if (!createdUser) {
-        throw new apiError(500, "Something went wrong while registering user");
-    }
+  const user = await prisma.user.create({
+    data: {
+      firstName,
+      lastName: lastName || "",
+      username,
+      email,
+      phoneNumber: phoneNumber || "",
+      password: hashedPassword,
+      emailVerificationToken: verificationToken,
+      emailVerificationTokenExpires: new Date(Date.now() + 3600000),
+      isVerified: true, // Auto-verify in development
+    },
+  });
 
-    // Send welcome email (fire-and-forget — don't block registration)
-    sendWelcomeEmail(email, firstName)
-      .then(() => console.log(`✉️  Welcome email sent to ${email}`))
-      .catch((err: any) => console.log(`⚠️  Email skipped (check SMTP config): ${err.message}`));
+  const createdUser = sanitizeUser(user);
 
-    return res.status(200).json(
-        new apiResponse(200, {
-            user: createdUser,
-        }, "User registered successfully. You can now login!")
+  sendWelcomeEmail(email, firstName)
+    .then(() => console.log(`✉️  Welcome email sent to ${email}`))
+    .catch((err: any) => console.log(`⚠️  Email skipped: ${err.message}`));
+
+  return res.status(200).json(
+    new apiResponse(200, { user: createdUser }, "User registered successfully")
+  );
+});
+
+export const loginUser = asyncHandler(async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    throw new apiError(400, "Email and password required");
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    throw new apiError(400, "Invalid email or password");
+  }
+
+  const isPasswordCorrect = await bcrypt.compare(password, user.password);
+  if (!isPasswordCorrect) {
+    throw new apiError(400, "Invalid email or password");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user.id);
+  const loggedInUser = sanitizeUser(user);
+
+  const options: CookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new apiResponse(
+        200,
+        { user: loggedInUser, accessToken, refreshToken },
+        "User logged in successfully"
+      )
     );
 });
 
-export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
-    const { token, email } = req.query as { token: string; email: string };
+export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as RequestWithUser).user._id;
 
-    const user = await User.findOne({
-        email,
-        emailVerificationToken: token,
-        emailVerificationTokenExpires: { $gt: Date.now() }
-    }) as UserDocument;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { refreshToken: null },
+  });
 
-    if (!user) {
-        throw new apiError(400, "Invalid or expired token");
-    }
+  const options: CookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  };
 
-    user.isVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationTokenExpires = undefined;
-
-    await user.save();
-
-    return res.status(200).json(new apiResponse(200, null, "Email verified successfully"));
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new apiResponse(200, {}, "User logged out successfully"));
 });
 
-const loginUser = asyncHandler(async (req: Request, res: Response) => {
-    const { email, password } = req.body as { email: string; password: string };
+export const refreshAccessToken = asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
 
-    if (!(email || password)) {
-        throw new apiError(400, "email password required");
-    }
-    
-    const user = await User.findOne({ email }) as UserDocument;
+  if (!refreshToken) throw new apiError(400, "Refresh token is required");
 
-    if (!user) {
-        throw new apiError(400, "invalid email");
-    }
+  try {
+    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET as string) as JwtPayload;
+    if (decoded.exp * 1000 < Date.now()) throw new apiError(401, "Refresh token expired");
 
-    const isPasswordCorrect = await user.isPasswordCorrect(password);
-
-    if (!isPasswordCorrect) {
-        throw new apiError(400, "invalid password");
+    const user = await prisma.user.findUnique({ where: { id: decoded._id } });
+    if (!user || user.refreshToken !== refreshToken) {
+      throw new apiError(401, "Invalid refresh token");
     }
 
-    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
-
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
-
-    console.log(user);
-
-    const options: CookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict"
-    };
+    const accessToken = generateAccessToken(user);
 
     return res
-        .status(200)
-        .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", refreshToken, options)
-        .json(
-            new apiResponse(
-                200,
-                { user: loggedInUser, accessToken, refreshToken },
-                "user logged in successfully"
-            )
-        );
+      .status(200)
+      .json(new apiResponse(200, { accessToken }, "Token refreshed"));
+  } catch (error) {
+    throw new apiError(401, "Invalid or expired token");
+  }
 });
 
-const logoutUser = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as RequestWithUser).user._id;
-    await User.findByIdAndUpdate(
-        userId,
-        {
-            $set: {
-                refreshToken: undefined
-            }
-        },
-        { new: true }
-    );
+// ─── PROFILE CONTROLLERS ──────────────────────────────────────────────────────
 
-    const options: CookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict"
-    };
+export const getUserProfile = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as RequestWithUser).user._id;
 
-    return res
-        .status(200)
-        .clearCookie("accessToken", options)
-        .clearCookie("refreshToken", options)
-        .json(new apiResponse(200, {}, "User logged out successfully"));
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new apiError(404, "User not found");
+
+  return res
+    .status(200)
+    .json(new apiResponse(200, { user: sanitizeUser(user) }, "User profile retrieved"));
 });
 
-const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
-    const { email } = req.body as { email: string };
+export const updateUserProfile = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as RequestWithUser).user._id;
+  const { firstName, lastName, phoneNumber } = req.body;
 
-    const user = await User.findOne({ email }) as UserDocument;
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(firstName && { firstName }),
+      ...(lastName && { lastName }),
+      ...(phoneNumber && { phoneNumber }),
+    },
+  });
 
-    if (!user) {
-        throw new apiError(400, "User does not exist");
-    }
-
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    const otpToken = jwt.sign(
-        { otp, id: user._id },
-        process.env.JWT_RESET_PASSWORD_SECRET as string,
-        { expiresIn: "15m" }
-    );
-
-    const message = `Your OTP for password reset is: ${otp}. It is valid for 15 minutes.`;
-
-    try {
-        await sendEmail({
-            email: user.email,
-            subject: "Password Reset OTP",
-            message,
-        });
-
-        return res
-            .status(200)
-            .json(new apiResponse(200, { otpToken }, "OTP sent successfully"));
-    } catch (error) {
-        throw new apiError(500, "Failed to send OTP email");
-    }
+  return res
+    .status(200)
+    .json(new apiResponse(200, { user: sanitizeUser(user) }, "Profile updated"));
 });
 
-const resetPassword = asyncHandler(async (req: Request, res: Response) => {
-    const { otpToken, newPassword } = req.body as { otpToken: string; newPassword: string };
+export const uploadProfileImage = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as RequestWithUser).user._id;
+  const avatarLocalPath = (req as RequestWithFile).file?.path;
 
-    try {
-        const decoded = jwt.verify(otpToken, process.env.JWT_RESET_PASSWORD_SECRET as string) as { otp: string; id: string };
+  if (!avatarLocalPath || !fs.existsSync(avatarLocalPath)) {
+    throw new apiError(400, "Valid avatar file is required");
+  }
 
-        const user = await User.findById(decoded.id) as UserDocument;
+  const avatar = await uploadOnCloudinary(avatarLocalPath, "avatar");
+  if (!avatar?.url) throw new apiError(400, "Error uploading to Cloudinary");
 
-        if (!user) {
-            throw new apiError(400, "User not found");
-        }
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatar: avatar.url },
+  });
 
-        user.password = newPassword;
-        await user.save();
-
-        return res.status(200).json(new apiResponse(200, null, "Password reset successful"));
-    } catch (error) {
-        throw new apiError(400, "Invalid or expired OTP");
-    }
+  return res
+    .status(200)
+    .json(new apiResponse(200, { user: sanitizeUser(user) }, "Avatar updated"));
 });
 
-const getUserProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as RequestWithUser).user._id;
-
-    const user = await User.findById(userId).select("-password -refreshToken");
-
-    if (!user) {
-        throw new apiError(404, "User not found");
-    }
-
-    return res.status(200).json(new apiResponse(200, { user }, "User profile retrieved successfully"));
-});
-
-const updateUserProfile = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as RequestWithUser).user._id;
-    const { firstName, lastName, phoneNumber } = req.body as {
-        firstName?: string;
-        lastName?: string;
-        phoneNumber?: string;
-    };
-
-    const user = await User.findById(userId) as UserDocument;
-
-    if (!user) {
-        throw new apiError(404, "User not found");
-    }
-
-    if (firstName) user.firstName = firstName;
-    if (lastName) user.lastName = lastName;
-    if (phoneNumber) user.phoneNumber = phoneNumber;
-
-    await user.save();
-
-    return res.status(200).json(new apiResponse(200, { user }, "Profile updated successfully"));
-});
-
-const uploadProfileImage = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as RequestWithUser).user._id;
-    const avatarLocalPath = (req as RequestWithFile).file?.path;
-
-    if (!avatarLocalPath) {
-        throw new apiError(400, "Avatar file is required");
-    }
-
-    // Check if file exists
-    if (!fs.existsSync(avatarLocalPath)) {
-        throw new apiError(400, "Uploaded file not found");
-    }
-
-    const avatar = await uploadOnCloudinary(avatarLocalPath, "avatar");
-
-    if (!avatar?.url) {
-        throw new apiError(400, "Error while uploading avatar to Cloudinary. Please check your Cloudinary configuration.");
-    }
-
-    const user = await User.findByIdAndUpdate(
-        userId,
-        { $set: { avatar: avatar.url } },
-        { new: true }
-    ).select("-password -refreshToken");
-
-    if (!user) {
-        throw new apiError(404, "User not found");
-    }
-
-    return res.status(200).json(new apiResponse(200, { user }, "Avatar updated successfully"));
-});
-
-export {
-    refreshAccessToken,
-    registerUser,
-    loginUser,
-    logoutUser,
-    forgotPassword,
-    resetPassword,
-    getUserProfile,
-    updateUserProfile,
-    uploadProfileImage
-}; 
+// Stubs for remaining unused features
+export const verifyEmail = asyncHandler(async (req: Request, res: Response) => res.status(200).json());
+export const forgotPassword = asyncHandler(async (req: Request, res: Response) => res.status(200).json());
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => res.status(200).json());

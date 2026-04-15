@@ -114,15 +114,15 @@ const Orders = () => {
                 {Array.isArray(order.items) && order.items.length > 0 ? (
                   <div className="space-y-2">
                     {order.items.slice(0, 3).map((item, i) => {
-                      // item can be a populated product or just an ObjectId string
-                      const isPopulated = typeof item === 'object' && item !== null && item.name;
+                      const productObj = item.productId || item;
+                      const isPopulated = typeof productObj === 'object' && productObj !== null && productObj.name;
                       return (
                         <div key={i} className="flex items-center gap-3">
                           {isPopulated && (
-                            <img src={item.images?.[0]} alt={item.name} className="w-10 h-10 object-contain border rounded" />
+                            <img src={productObj.images?.[0]} alt={productObj.name} className="w-10 h-10 object-contain border rounded" />
                           )}
                           <p className="text-sm text-gray-700 line-clamp-1">
-                            {isPopulated ? item.name : `Product ID: ${String(item).slice(-8)}`}
+                            {isPopulated ? productObj.name : `Product ID: ${String(productObj?._id || productObj).slice(-8)}`}
                           </p>
                         </div>
                       );

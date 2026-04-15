@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+model User {
+  id                            String    @id @default(uuid())
+  username                      String    @unique
+  email                         String    @unique
+  firstName                     String
+  lastName                      String
+  phoneNumber                   String
+  gender                        String?
+  avatar                        String?
+  dateOfBirth                   DateTime?
+  password                      String
+  refreshToken                  String?
+  emailVerificationToken        String?
+  emailVerificationTokenExpires DateTime?
+  isVerified                    Boolean   @default(false)
+  
+  // Relations
+  cart      Cart?
+  orders    Order[]
+  addresses Address[]
+  reviews   Review[]
+  wishlists Wishlist[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String    @unique
+  icon     String?
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Brand {
+  id           String    @id @default(uuid())
+  name         String    @unique
+  logo         String?
+  productCount Int       @default(0)
+  products     Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  price       Float
+  discount    Float    @default(0.0)
+  stock       Int
+  rating      Float    @default(0.0)
+
+  // Relations
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id])
+
+  images      ProductImage[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  wishlists   Wishlist[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  url       String
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Cart {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  totalAmount Float    @default(0.0)
+  items       CartItem[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CartItem {
+  id        String  @id @default(uuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  
+  quantity  Int
+  price     Float
+
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  orderDate       DateTime @default(now())
+  shippingDate    DateTime
+  status          String   @default("Pending") // "Pending", "Shipped", "Delivered", "Cancelled"
+  totalAmount     Float
+  shippingAddress String?
+  
+  paymentId       String?
+  razorpayOrderId String?
+  paymentStatus   String   @default("Pending") // "Pending", "Paid", "Failed"
+
+  items           OrderItem[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  
+  quantity  Int
+  price     Float   // Historical price at order time
+}
+
+model Address {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  street    String
+  city      String
+  state     String
+  pincode   String
+  country   String
+
+  createdAt DateTime @default(now())
+}
+
+model Review {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  
+  rating    Int
+  comment   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Wishlist {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  createdAt DateTime @default(now())
+}

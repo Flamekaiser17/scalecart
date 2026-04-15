@@ -1,10 +1,12 @@
 import nodemailer from 'nodemailer';
+import PDFDocument from 'pdfkit';
 
 interface SendEmailOptions {
   email: string;
   subject: string;
   message: string;    // plain-text fallback
   html?: string;      // rich HTML version
+  attachments?: any[]; // For PDF or other attachments
 }
 
 // ─── Core Transporter (Gmail SMTP via App Password) ────────────────────────
@@ -18,7 +20,7 @@ const createTransporter = () => {
     secure: false,          // STARTTLS on port 587
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,  // Gmail App Password (16 chars)
+      pass: process.env.SMTP_PASS?.replace(/\s/g, ''),  // Gmail App Password (16 chars with no spaces)
     },
   });
 };
@@ -28,14 +30,15 @@ const sendEmail = async (options: SendEmailOptions): Promise<void> => {
   const transporter = createTransporter();
 
   await transporter.sendMail({
-    from: `"ScaleCart 🛒" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+    from: `"ScaleCart" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
     to: options.email,
     subject: options.subject,
     text: options.message,
     html: options.html,
+    attachments: options.attachments,
   });
 
-  console.log(`📧 Email sent → ${options.email} | Subject: "${options.subject}"`);
+  console.log(`Email sent → ${options.email} | Subject: "${options.subject}"`);
 };
 
 // ─── Order Confirmation Email ───────────────────────────────────────────────
@@ -87,14 +90,14 @@ export const sendOrderConfirmationEmail = async (
   <body>
     <div class="wrapper">
       <div class="header">
-        <h1>Scale<span>Cart</span> 🛒</h1>
+        <h1>Scale<span>Cart</span></h1>
       </div>
       <div class="card">
-        <p class="greeting">🎉 Your Order is Confirmed!</p>
+        <p class="greeting">Your Order is Confirmed!</p>
         <p class="subtext">Thank you for shopping with ScaleCart. Your order has been received and is being processed.</p>
 
         <div class="status-banner">
-          <p>✅ Payment Received — Order Placed Successfully</p>
+          <p>Payment Received — Order Placed Successfully</p>
         </div>
 
         <div class="details">
@@ -143,11 +146,59 @@ export const sendOrderConfirmationEmail = async (
   </html>
   `;
 
+  // --- PDF GENERATION LOGIC ---
+  const generateInvoicePDF = (): Promise<Buffer> => {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers: Buffer[] = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      // Business Header
+      doc.fillColor('#2874f0').fontSize(26).text('ScaleCart Invoice', { align: 'right' });
+      doc.fontSize(10).fillColor('gray')
+        .text(`Order ID: #${order.orderId.slice(-10).toUpperCase()}`, { align: 'right' })
+        .text(`Date: ${new Date().toLocaleDateString('en-IN')}`, { align: 'right' });
+      doc.moveDown(2);
+
+      // Customer Info
+      doc.fillColor('#000000').fontSize(16).text('Billed To:');
+      doc.fontSize(12).text(order.shippingAddress || 'N/A').moveDown(2);
+
+      // Order Details Table
+      doc.fontSize(14).fillColor('#2874f0').text('Order Details');
+      doc.moveTo(50, doc.y + 5).lineTo(550, doc.y + 5).stroke();
+      doc.moveDown(1.5);
+      
+      doc.fillColor('#000000').fontSize(12)
+        .text(`Items Ordered: ${order.itemCount}`)
+        .moveDown(0.5)
+        .text('Delivery Charges: FREE')
+        .moveDown(1);
+
+      doc.fontSize(16).fillColor('#388e3c')
+        .text(`Total Amount Paid: INR ${Math.floor(order.totalAmount).toLocaleString('en-IN')}`, { align: 'right' });
+
+      doc.moveDown(3);
+      doc.fontSize(10).fillColor('gray').text('Thank you for shopping with ScaleCart. This is a computer generated invoice and does not require a signature.', { align: 'center' });
+      doc.end();
+    });
+  };
+
+  const invoiceBuffer = await generateInvoicePDF();
+
   await sendEmail({
     email,
-    subject: `✅ Order Confirmed #${order.orderId.slice(-8).toUpperCase()} — ScaleCart`,
+    subject: `Order Confirmed #${order.orderId.slice(-8).toUpperCase()} — ScaleCart`,
     message: `Your order has been confirmed! Order ID: ${order.orderId}. Total: ₹${Math.floor(order.totalAmount)}. Estimated delivery: 3-5 business days.`,
     html,
+    attachments: [
+      {
+        filename: `ScaleCart_Invoice_${order.orderId.slice(-8)}.pdf`,
+        content: invoiceBuffer,
+      }
+    ]
   });
 };
 
@@ -173,9 +224,9 @@ export const sendWelcomeEmail = async (email: string, firstName: string): Promis
   </head>
   <body>
     <div class="wrapper">
-      <div class="header"><h1>Scale<span>Cart</span> 🛒</h1></div>
+      <div class="header"><h1>Scale<span>Cart</span></h1></div>
       <div class="card">
-        <h2>Welcome, ${firstName || 'there'}! 👋</h2>
+        <h2>Welcome, ${firstName || 'there'}!</h2>
         <p>
           Your account has been created successfully.<br/>
           Start exploring thousands of products across electronics, fashion, beauty, and more.
@@ -193,7 +244,7 @@ export const sendWelcomeEmail = async (email: string, firstName: string): Promis
 
   await sendEmail({
     email,
-    subject: '👋 Welcome to ScaleCart — Happy Shopping!',
+    subject: 'Welcome to ScaleCart — Happy Shopping!',
     message: `Welcome ${firstName}! Your ScaleCart account is ready. Start shopping at ${process.env.FRONTEND_URL || 'http://localhost:5173'}`,
     html,
   });

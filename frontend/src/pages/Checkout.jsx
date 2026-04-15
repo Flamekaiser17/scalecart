@@ -22,7 +22,29 @@ const Checkout = () => {
     addressLine: '',
   });
 
-  const handleChange = (e) => setAddress({ ...address, [e.target.name]: e.target.value });
+  const handleChange = async (e) => {
+    const { name, value } = e.target;
+    setAddress({ ...address, [name]: value });
+
+    // Auto-fetch State and City if pincode is 6 digits
+    if (name === 'pincode' && value.length === 6 && /^\d+$/.test(value)) {
+      try {
+        const response = await fetch(`https://api.postalpincode.in/pincode/${value}`);
+        const data = await response.json();
+        if (data && data[0].Status === 'Success') {
+          const postOffice = data[0].PostOffice[0];
+          setAddress(prev => ({
+            ...prev,
+            pincode: value,
+            state: postOffice.State,
+            city: postOffice.District,
+          }));
+        }
+      } catch (error) {
+        console.error("Failed to fetch location data", error);
+      }
+    }
+  };
 
   // PLACE ORDER handler
   const handleCheckout = async (e) => {

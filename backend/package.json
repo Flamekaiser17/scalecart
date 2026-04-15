@@ -16,7 +16,14 @@
   ],
   "author": "SHIVANSH",
   "license": "ISC",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.7.0",
+    "@prisma/client": "^7.7.0",
+    "@types/pdfkit": "^0.17.5",
+    "@types/pg": "^8.20.0",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.3",
     "cloudinary": "^2.5.1",
@@ -37,6 +44,9 @@
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
+    "pdfkit": "^0.18.0",
+    "pg": "^8.20.0",
+    "prisma": "^7.7.0",
     "razorpay": "^2.9.6"
   },
   "devDependencies": {
