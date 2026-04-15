@@ -10,8 +10,8 @@ export default defineConfig({
     seed: "npx tsx ./prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
-    // @ts-ignore - Supabase direct link workaround for Prisma V7 Typings
-    directUrl: process.env["DIRECT_URL"],
+    // For Prisma v7 CLI (migrate/db push), we MUST use the direct database connection
+    // because Supabase connection pooling (port 6543) does not support schema alterations. 
+    url: process.env["DIRECT_URL"],
   },
 });

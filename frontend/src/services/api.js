@@ -89,9 +89,32 @@ export const removeFromWishlist = async (productId) => {
   return response.data;
 };
 
-// --- ORDER APIs ---
+// --- PROFILE APIs ---
+export const updateProfile = async (data) => {
+  const response = await api.put('/users/profile', data);
+  return response.data;
+};
+
+// --- ORDER APIs (History) ---
 export const getUserOrders = async () => {
   const response = await api.get('/orders');
+  return response.data;
+};
+
+// --- ADDRESS APIs ---
+export const fetchAddresses = async () => {
+  // Backend route is GET /api/v1/users/addresses
+  const response = await api.get('/users/addresses');
+  return response.data;
+};
+
+export const addAddress = async (data) => {
+  const response = await api.post('/users/address', data);
+  return response.data;
+};
+
+export const deleteAddress = async (id) => {
+  const response = await api.delete(`/users/address/${id}`);
   return response.data;
 };
 

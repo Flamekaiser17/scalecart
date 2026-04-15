@@ -4,21 +4,19 @@ import {
     getProducts,
     getProductById,
     updateProduct,
-    deleteProduct,
-    searchProducts,
-    getProductsByCategory
+    deleteProduct
 } from "../controllers/product.controllers.js";
 import { upload } from "../middlewares/multer.middlewares.js";
 
 const router: Router = Router();
 
-// Use multer for file upload parsing
-router.post("/", upload.array("images", 10), createProduct);
+// Products route (GET / handles search and category filters via query params)
 router.get("/", getProducts);
 router.get("/:id", getProductById);
+
+// Admin / Upload routes
+router.post("/", upload.array("images", 10), createProduct);
 router.put("/:id", updateProduct);
 router.delete("/:id", deleteProduct);
 
-
-
-export default router; 
+export default router;

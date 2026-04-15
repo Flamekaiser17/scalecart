@@ -56,8 +56,10 @@ const Home = ({ searchQuery = '' }) => {
     if (!urlCategory) {
       setDbCategoryId('');
     } else {
-      const matched = categories.find(c => c.name?.toLowerCase().includes(urlCategory.toLowerCase()));
-      setDbCategoryId(matched ? matched._id : '');
+      // Use exact case-insensitive match to prevent e.g. "Men" matching "Women Dresses"
+      const matched = categories.find(c => c.name?.toLowerCase() === urlCategory.toLowerCase());
+      // Prisma uses 'id', not '_id'
+      setDbCategoryId(matched ? (matched.id || matched._id) : '');
     }
     setPage(1);
   }, [urlCategory, categories]);

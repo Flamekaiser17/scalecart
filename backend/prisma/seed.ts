@@ -30,16 +30,31 @@ async function main() {
   console.log(`   → Received ${raw.length} products`);
 
   // Map DummyJSON category slugs → clean display names
+  // IMPORTANT: These must match EXACTLY the names used in Navbar.jsx options
   const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
-    "smartphones":             "Smartphones",
+    "smartphones":             "Mobile Accessories",
     "laptops":                 "Laptops",
     "furniture":               "Furniture",
     "beauty":                  "Beauty",
     "fragrances":              "Fragrances",
     "groceries":               "Groceries",
+    "home-decoration":         "Home Decoration",
+    "kitchen-accessories":     "Kitchen Accessories",
     "mens-shirts":             "Men's Fashion",
     "mens-shoes":              "Men's Shoes",
-    "womens-dresses":          "Women's Fashion",
+    "mens-watches":            "Mens Watches",
+    "womens-dresses":          "Women Dresses",
+    "womens-shoes":            "Women's Shoes",
+    "womens-watches":          "Womens Watches",
+    "womens-bags":             "Women's Fashion",
+    "womens-jewellery":        "Women's Fashion",
+    "sunglasses":              "Clothing",
+    "tops":                    "Clothing",
+    "vehicle":                 "Electronics",
+    "motorcycle":              "Electronics",
+    "sports-accessories":      "Sports Equipments",
+    "skin-care":               "Beauty",
+    "tablets":                 "Electronics",
   };
 
   // ─────────────── CATEGORIES ───────────────

@@ -1,22 +1,8 @@
 import multer from "multer";
 import fs from "fs";
 import { Request, Response } from "express";
-import Product from "../models/product.models.js";
-import Brand from "../models/brand.models.js";
-import Category from "../models/category.models.js";
+import prisma from "../db/prisma.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
-import mongoose from "mongoose";
-
-interface UploadedFile {
-    path: string;
-    fieldname: string;
-    originalname: string;
-    encoding: string;
-    mimetype: string;
-    size: number;
-    destination: string;
-    filename: string;
-}
 
 interface RequestWithFile extends Request {
     file?: Express.Multer.File;
@@ -37,11 +23,19 @@ export const uploadData = [
             const data = JSON.parse(fileContent);
 
             const type = req.query.type as string || req.body.type;
-            let result;
+            let insertedCount = 0;
+
             if (type === 'brand') {
-                result = await Brand.insertMany(data);
+                const result = await prisma.brand.createMany({
+                    data: data.map((item: any) => ({
+                        name: item.name,
+                        logo: item.logo,
+                        productCount: item.productCount || 0
+                    })),
+                    skipDuplicates: true
+                });
+                insertedCount = result.count;
             } else if (type === 'category') {
-                const categoriesToInsert = [];
                 for (const item of data) {
                     let icon = item.icon;
                     if (typeof icon === 'string' && !icon.startsWith('http')) {
@@ -50,77 +44,103 @@ export const uploadData = [
                             icon = uploadResult.secure_url;
                         }
                     }
-                    categoriesToInsert.push({ ...item, icon });
+                    await prisma.category.upsert({
+                        where: { name: item.name },
+                        update: { icon: icon },
+                        create: {
+                            name: item.name,
+                            icon: icon
+                        }
+                    });
+                    insertedCount++;
                 }
-                result = await Category.insertMany(categoriesToInsert);
             } else {
-                const productsToInsert = [];
+                // Products
                 for (const item of data) {
+                    // Resolve Brand ID
                     let brandId = item.brandId;
                     if (!brandId && item.brandName) {
-                        const brand = await Brand.findOne({ name: { $regex: `^${item.brandName}$`, $options: 'i' } });
-                        if (brand) {
-                            brandId = brand._id;
-                        } else {
-                            throw new Error(`Brand not found for name: ${item.brandName}`);
-                        }
+                        const brand = await prisma.brand.findFirst({
+                            where: { name: { equals: item.brandName, mode: 'insensitive' } }
+                        });
+                        if (brand) brandId = brand.id;
                     }
+
+                    // Resolve Category ID
+                    let categoryId = item.categoryId;
+                    if (!categoryId && item.categoryName) {
+                        const category = await prisma.category.findFirst({
+                            where: { name: { equals: item.categoryName, mode: 'insensitive' } }
+                        });
+                        if (category) categoryId = category.id;
+                    }
+
+                    if (!categoryId) {
+                        console.warn(`Skipping product "${item.name}": Category not found.`);
+                        continue;
+                    }
+
                     let images = item.images;
+                    const imageList: { url: string }[] = [];
                     if (Array.isArray(images)) {
-                        const uploadedImages = [];
                         for (let img of images) {
                             if (typeof img === 'string' && !img.startsWith('http')) {
                                 const uploadResult = await uploadOnCloudinary(img, 'ecommerce/product-images');
                                 if (uploadResult && uploadResult.secure_url) {
-                                    uploadedImages.push(uploadResult.secure_url);
+                                    imageList.push({ url: uploadResult.secure_url });
                                 }
                             } else {
-                                uploadedImages.push(img);
+                                imageList.push({ url: img });
                             }
                         }
-                        images = uploadedImages;
                     } else if (typeof images === 'string' && !images.startsWith('http')) {
                         const uploadResult = await uploadOnCloudinary(images, 'ecommerce/product-images');
-                        images = uploadResult && uploadResult.secure_url ? [uploadResult.secure_url] : [];
-                    }
-                    productsToInsert.push({ 
-                        ...item, 
-                        brandId: brandId ? new mongoose.Types.ObjectId(brandId) : undefined,
-                        images 
-                    });
-                }
-                result = await Product.insertMany(productsToInsert);
-                
-                for (const product of result) {
-                    if (product.brandId) {
-                        const brand = await Brand.findById(product.brandId);
-                        if (brand) {
-                            brand.productCount = (brand.productCount || 0) + 1;
-                            await brand.save();
+                        if (uploadResult && uploadResult.secure_url) {
+                            imageList.push({ url: uploadResult.secure_url });
                         }
+                    } else if (typeof images === 'string') {
+                        imageList.push({ url: images });
                     }
-                    if (Array.isArray(product.categories)) {
-                        for (const catName of product.categories) {
-                            const category = await Category.findOne({ name: { $regex: `^${catName}$`, $options: 'i' } });
-                            if (category && !category.products.some(pid => pid.equals(product._id))) {
-                                category.products.push(product._id as mongoose.Types.ObjectId);
-                                await category.save();
+
+                    // Create product and relate images
+                    const product = await prisma.product.create({
+                        data: {
+                            name: item.name,
+                            description: item.description,
+                            price: Number(item.price),
+                            discount: Number(item.discount) || 0,
+                            stock: Number(item.stock),
+                            categoryId: categoryId,
+                            brandId: brandId || "", // Ensure this is not null if your schema requires it
+                            rating: item.rating || 0,
+                            images: {
+                                create: imageList
                             }
                         }
+                    });
+
+                    // Update brand product count
+                    if (brandId) {
+                        await prisma.brand.update({
+                            where: { id: brandId },
+                            data: { productCount: { increment: 1 } }
+                        });
                     }
+                    insertedCount++;
                 }
             }
 
             fs.unlinkSync(filePath);
             res.status(200).json({ 
                 message: `Data uploaded and inserted successfully for ${type || 'product'}`, 
-                inserted: result.length 
+                inserted: insertedCount 
             });
         } catch (err: any) {
+            console.error("Upload error:", err);
             if (req.file?.path && fs.existsSync(req.file.path)) {
                 fs.unlinkSync(req.file.path);
             }
             res.status(500).json({ message: "Upload failed", error: err.message });
         }
     }
-]; 
+];

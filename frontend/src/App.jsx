@@ -8,6 +8,7 @@ import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 import Orders from './pages/Orders';
 import Wishlist from './pages/Wishlist';
+import Profile from './pages/Profile';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 
@@ -30,6 +31,7 @@ const App = () => {
                 <Route path="/success" element={<OrderSuccess />} />
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/wishlist" element={<Wishlist />} />
+                <Route path="/account/profile" element={<Profile />} />
               </Routes>
             </main>
           </div>

@@ -8,7 +8,7 @@ import AuthModal from './AuthModal';
 
 const SubNavCat = ({ title, options }) => (
   <div className="group relative h-full flex items-center cursor-pointer py-2">
-    <Link to={`/?category=${encodeURIComponent(options ? options[0] : title)}`} className="flex items-center gap-1 hover:text-flipkartBlue transition-colors font-medium h-full">
+    <Link to={`/?category=${encodeURIComponent(title)}`} className="flex items-center gap-1 hover:text-flipkartBlue transition-colors font-medium h-full">
       {title} {options && <ChevronDown size={14} className="text-gray-400 group-hover:rotate-180 transition-transform" />}
     </Link>
     
@@ -108,7 +108,7 @@ const Navbar = ({ onSearch }) => {
                          <span className="font-semibold text-gray-800">New Customer?</span>
                          <span className="text-flipkartBlue font-bold text-[13px]">Sign Up</span>
                       </div>
-                      <Link to="/profile" className="flex items-center px-4 py-3 hover:bg-gray-50 border-b">
+                      <Link to="/account/profile" className="flex items-center px-4 py-3 hover:bg-gray-50 border-b">
                          <User size={16} className="mr-3 text-flipkartBlue"/> My Profile
                       </Link>
                       <Link to="/orders" className="flex items-center px-4 py-3 hover:bg-gray-50 border-b">
@@ -188,8 +188,6 @@ const Navbar = ({ onSearch }) => {
              <SubNavCat title="Baby & Kids" options={['Toys', 'Kids Clothing']} />
              <SubNavCat title="Home & Furniture" options={['Furniture', 'Home Decoration', 'Kitchen Accessories']} />
              <SubNavCat title="Sports, Books & More" options={['Books', 'Sports Equipments']} />
-             <Link to="/?category=flights" className="cursor-pointer hover:text-flipkartBlue font-medium py-2">Flights</Link>
-             <Link to="/?category=offers" className="cursor-pointer hover:text-flipkartBlue font-medium py-2">Offer Zone</Link>
           </div>
         </div>
       </header>

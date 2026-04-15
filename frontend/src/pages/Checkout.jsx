@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { checkoutOrder } from '../services/api';
-import { ShieldCheck, Check } from 'lucide-react';
+import { checkoutOrder, fetchAddresses } from '../services/api';
+import { ShieldCheck, Check, Plus } from 'lucide-react';
 
 const STEPS = ['LOGIN', 'DELIVERY ADDRESS', 'ORDER SUMMARY', 'PAYMENT OPTIONS'];
 
@@ -14,9 +14,33 @@ const Checkout = () => {
 
   const total = cartItems.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
 
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('new');
+
   const [address, setAddress] = useState({
     name: '', phone: '', pincode: '', city: '', state: '', addressLine: '',
   });
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const getAddresses = async () => {
+      try {
+        const res = await fetchAddresses();
+        const addressesList = res.addresses || [];
+        setSavedAddresses(addressesList);
+        
+        const defaultAddr = addressesList.find(a => a.isDefault);
+        if (defaultAddr) {
+          setSelectedAddressId(defaultAddr.id);
+        } else if (addressesList.length > 0) {
+          setSelectedAddressId(addressesList[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to fetch saved addresses:", err);
+      }
+    };
+    getAddresses();
+  }, [isLoggedIn]);
 
   const handleChange = async (e) => {
     const { name, value } = e.target;
@@ -45,12 +69,25 @@ const Checkout = () => {
 
     try {
       setLoading(true);
-      const shippingAddress = `${address.name}, ${address.addressLine}, ${address.city}, ${address.state} - ${address.pincode}, Phone: ${address.phone}`;
-      const res = await checkoutOrder({ shippingAddress });
+      
+      let shippingAddressStr = '';
+
+      if (selectedAddressId === 'new') {
+        if (!address.name || !address.phone || !address.pincode || !address.city || !address.state || !address.addressLine) {
+           throw new Error('Please fill all required address fields.');
+        }
+        shippingAddressStr = `${address.name}, ${address.addressLine}, ${address.city}, ${address.state} - ${address.pincode}, Phone: ${address.phone}`;
+      } else {
+        const selected = savedAddresses.find(a => a.id === selectedAddressId);
+        if (!selected) throw new Error('Selected address not found.');
+        shippingAddressStr = `${selected.name}, ${selected.street}, ${selected.city}, ${selected.state} - ${selected.postalCode}, Phone: ${selected.phoneNumber}`;
+      }
+
+      const res = await checkoutOrder({ shippingAddress: shippingAddressStr });
       const orderData = res.data || res;
       await loadCart();
       navigate('/success', {
-        state: { orderId: orderData._id, total, address: shippingAddress, itemCount: cartItems.length }
+        state: { orderId: orderData._id, total, address: shippingAddressStr, itemCount: cartItems.length }
       });
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Checkout failed. Please try again.');
@@ -115,31 +152,92 @@ const Checkout = () => {
               )}
 
               <form onSubmit={handleCheckout} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input required type="text" name="name" value={address.name} onChange={handleChange} placeholder="Full Name *" className={inputCls} />
-                  <input required type="tel" name="phone" value={address.phone} onChange={handleChange} placeholder="10-digit Mobile Number *" pattern="[0-9]{10}" className={inputCls} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input required type="text" name="pincode" value={address.pincode} onChange={handleChange} placeholder="Pincode *" maxLength={6} className={inputCls} />
-                  <input required type="text" name="city" value={address.city} onChange={handleChange} placeholder="City / District *" className={inputCls} />
-                </div>
-                <input required type="text" name="state" value={address.state} onChange={handleChange} placeholder="State *" className={inputCls} />
-                <textarea required name="addressLine" value={address.addressLine} onChange={handleChange} rows={3} placeholder="House No, Building, Street, Area *" className={`${inputCls} resize-none`} />
                 
-                <div className="pt-1">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-10 py-3 bg-flipkartOrange text-white font-semibold uppercase text-[14px] rounded-sm shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer tracking-wide"
-                  >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Processing...
-                      </span>
-                    ) : 'SAVE AND DELIVER HERE'}
-                  </button>
-                </div>
+                {/* Render Saved Addresses */}
+                {savedAddresses.length > 0 && (
+                  <div className="space-y-3 mb-4 mt-2">
+                    {savedAddresses.map((addr) => (
+                      <label key={addr.id} className={`flex items-start gap-4 p-4 border rounded-sm cursor-pointer transition-colors ${selectedAddressId === addr.id ? 'bg-[#f5faff] border-flipkartBlue cursor-default' : 'bg-white border-[#f0f0f0] hover:border-flipkartBlue'}`}>
+                        <input 
+                           type="radio" 
+                           name="delivery_address" 
+                           className="mt-1 w-4 h-4 text-flipkartBlue"
+                           checked={selectedAddressId === addr.id}
+                           onChange={() => setSelectedAddressId(addr.id)}
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-[14px] text-[#212121]">{addr.name}</span>
+                            <span className="text-[12px] font-bold text-[#878787] uppercase bg-white border border-[#e0e0e0] px-2 py-0.5 rounded-sm">{addr.phoneNumber}</span>
+                            {addr.isDefault && (
+                              <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm font-bold uppercase">Default</span>
+                            )}
+                          </div>
+                          <p className="text-[13px] text-[#212121] mt-1.5 line-clamp-2 leading-relaxed">
+                             {addr.street}, {addr.city}, {addr.state} - <span className="font-bold">{addr.postalCode}</span>
+                          </p>
+                          {selectedAddressId === addr.id && (
+                             <div className="mt-4 pt-2">
+                               <button
+                                  type="submit"
+                                  disabled={loading}
+                                  className="px-10 py-3 bg-flipkartOrange text-white font-semibold uppercase text-[14px] rounded-sm shadow-sm hover:shadow-md transition-all disabled:opacity-50 cursor-pointer tracking-wide"
+                               >
+                                  {loading ? 'Processing...' : 'DELIVER HERE'}
+                               </button>
+                             </div>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add New Address Option */}
+                {savedAddresses.length > 0 && (
+                  <label className="flex items-center gap-3 p-4 border border-[#f0f0f0] bg-white rounded-sm cursor-pointer hover:border-flipkartBlue mb-4">
+                     <input 
+                        type="radio" 
+                        name="delivery_address" 
+                        className="w-4 h-4 text-flipkartBlue focus:ring-flipkartBlue"
+                        checked={selectedAddressId === 'new'}
+                        onChange={() => setSelectedAddressId('new')}
+                     />
+                     <Plus size={16} className="text-flipkartBlue" />
+                     <span className="text-[14px] font-bold text-flipkartBlue uppercase">Add a new address</span>
+                  </label>
+                )}
+
+                {/* Manual Form (Shown if selected or if no saved addresses) */}
+                {selectedAddressId === 'new' && (
+                  <div className={savedAddresses.length > 0 ? "ml-0 sm:ml-7 p-5 border border-[#e0e0e0] bg-[#fafafa] rounded-sm" : ""}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <input required={selectedAddressId === 'new'} type="text" name="name" value={address.name} onChange={handleChange} placeholder="Full Name *" className={inputCls} />
+                      <input required={selectedAddressId === 'new'} type="tel" name="phone" value={address.phone} onChange={handleChange} placeholder="10-digit Mobile Number *" pattern="[0-9]{10}" className={inputCls} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <input required={selectedAddressId === 'new'} type="text" name="pincode" value={address.pincode} onChange={handleChange} placeholder="Pincode *" maxLength={6} className={inputCls} />
+                      <input required={selectedAddressId === 'new'} type="text" name="city" value={address.city} onChange={handleChange} placeholder="City / District *" className={inputCls} />
+                    </div>
+                    <input required={selectedAddressId === 'new'} type="text" name="state" value={address.state} onChange={handleChange} placeholder="State *" className={`mb-4 ${inputCls}`} />
+                    <textarea required={selectedAddressId === 'new'} name="addressLine" value={address.addressLine} onChange={handleChange} rows={3} placeholder="House No, Building, Street, Area *" className={`mb-4 ${inputCls} resize-none`} />
+                    
+                    <div className="pt-2 border-t border-[#e0e0e0] w-full text-right sm:text-left pt-4">
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="px-10 py-3 bg-flipkartOrange text-white font-semibold uppercase text-[14px] rounded-sm shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer tracking-wide"
+                      >
+                        {loading ? (
+                          <span className="flex items-center gap-2">
+                            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            Processing...
+                          </span>
+                        ) : 'SAVE AND DELIVER HERE'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </form>
             </div>
           </div>
