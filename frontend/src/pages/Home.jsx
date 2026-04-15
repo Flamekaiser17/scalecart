@@ -3,19 +3,14 @@ import { getProducts, getCategories } from '../services/api';
 import ProductCard from '../components/ProductCard';
 import Loader from '../components/Loader';
 import { useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-// Modern Flipkart-style Banner Groups (3 images per slide on desktop)
-const BANNER_GROUPS = [
-  [
-    'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop', // Headphones
-    'https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600&auto=format&fit=crop', // Shoes
-    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=600&auto=format&fit=crop'  // Smartwatch
-  ],
-  [
-    'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?q=80&w=600&auto=format&fit=crop', // Camera
-    'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=600&auto=format&fit=crop', // Fashion Women
-    'https://images.unsplash.com/photo-1502920901399-4c8d76dbd8ff?q=80&w=600&auto=format&fit=crop'  // Laptop / Desk
-  ]
+// Banner carousel images — reliable Unsplash sources
+const BANNERS = [
+  'https://images.unsplash.com/photo-1607082349566-187342175e2f?q=80&w=1400&h=300&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1400&h=300&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1400&h=300&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=1400&h=300&auto=format&fit=crop',
 ];
 
 const Home = ({ searchQuery = '' }) => {
@@ -26,22 +21,24 @@ const Home = ({ searchQuery = '' }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
-  
-  // Real DB category ID binding
   const [dbCategoryId, setDbCategoryId] = useState('');
-
   const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
 
+  // Auto-rotate banner
   useEffect(() => {
     const interval = setInterval(() => {
-      setBannerIndex(i => (i + 1) % BANNER_GROUPS.length);
+      setBannerIndex(i => (i + 1) % BANNERS.length);
     }, 4000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch db categories to map URL strings (like "laptops") to Mongo ObjectIDs
+  const prevBanner = () => setBannerIndex(i => (i - 1 + BANNERS.length) % BANNERS.length);
+  const nextBanner = () => setBannerIndex(i => (i + 1) % BANNERS.length);
+
+  // Fetch categories
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -54,28 +51,21 @@ const Home = ({ searchQuery = '' }) => {
     fetchCategories();
   }, []);
 
-  // Map URL string category to DB category ID
+  // Map URL category string to DB category ID
   useEffect(() => {
     if (!urlCategory) {
       setDbCategoryId('');
     } else {
-      // Find matching category ID. e.g. URL="Laptops" matches "laptops" in DB
       const matched = categories.find(c => c.name?.toLowerCase().includes(urlCategory.toLowerCase()));
-      if (matched) {
-        setDbCategoryId(matched._id);
-      } else {
-        // If not found in our DB, just pass it blank or use the string (backend fallback)
-        setDbCategoryId('');
-      }
+      setDbCategoryId(matched ? matched._id : '');
     }
     setPage(1);
   }, [urlCategory, categories]);
 
-  // Also reset page on search query
-  useEffect(() => {
-    setPage(1);
-  }, [searchQuery]);
+  // Reset page on search
+  useEffect(() => { setPage(1); }, [searchQuery]);
 
+  // Fetch products
   const fetchProductsList = useCallback(async () => {
     try {
       setLoading(true);
@@ -87,6 +77,7 @@ const Home = ({ searchQuery = '' }) => {
       } else {
         setProducts(prev => [...prev, ...(res.products || [])]);
       }
+      setTotalItems(res.pagination?.totalItems || 0);
       setHasMore(res.pagination ? res.pagination.currentPage < res.pagination.totalPages : false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch products.');
@@ -96,101 +87,105 @@ const Home = ({ searchQuery = '' }) => {
     }
   }, [searchQuery, dbCategoryId, page]);
 
-  useEffect(() => {
-    fetchProductsList();
-  }, [fetchProductsList]);
+  useEffect(() => { fetchProductsList(); }, [fetchProductsList]);
 
-  // Helper clear filter
-  const clearFilter = () => {
-    setSearchParams(new URLSearchParams());
+  const clearFilter = () => setSearchParams(new URLSearchParams());
+
+  // Header text
+  const getHeaderText = () => {
+    if (searchQuery) return `Search Results for "${searchQuery}"`;
+    if (urlCategory) return urlCategory;
+    return 'Best of Electronics & More';
   };
 
   return (
     <div className="w-full pb-10">
       
-      {/* Modern Flipkart Carousel — 3 Side-by-Side Round Cards */}
-      <div className="max-w-[1400px] mx-auto pt-3 px-2 sm:px-4">
-        <div className="relative group">
-          {/* Animated Slider Container */}
-          <div className="relative overflow-hidden w-full h-[140px] sm:h-[180px] md:h-[220px] lg:h-[250px] transition-all">
-            {BANNER_GROUPS.map((group, groupIdx) => (
-              <div 
-                key={groupIdx} 
-                className={`absolute inset-0 w-full h-full flex gap-3 sm:gap-4 md:gap-5 transition-all duration-700 ease-in-out ${groupIdx === bannerIndex ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full'}`}
-              >
-                {group.map((src, imgIdx) => (
-                  <div 
-                    key={imgIdx} 
-                    className={`relative flex-1 h-full rounded-[10px] md:rounded-[14px] overflow-hidden cursor-pointer shadow-sm hover:shadow transition-shadow ${imgIdx > 0 ? 'hidden md:block' : ''} ${imgIdx > 1 ? 'hidden lg:block' : ''}`}
-                  >
-                    <img src={src} className="w-full h-full object-cover transition-transform duration-700 hover:scale-[1.03]" alt={`promo-${groupIdx}-${imgIdx}`} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+      {/* ===== BANNER CAROUSEL ===== */}
+      <div className="relative w-full bg-[#f0f0f0] overflow-hidden h-[140px] sm:h-[200px] md:h-[240px] lg:h-[280px] group">
+        {BANNERS.map((src, i) => (
+          <img
+            key={i}
+            src={src}
+            alt={`banner-${i}`}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-in-out ${i === bannerIndex ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
+        
+        {/* Dark gradient overlay at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/15 to-transparent pointer-events-none"></div>
 
-          {/* Dots Indicator */}
-          <div className="flex justify-center mt-3 mb-2 space-x-1.5">
-            {BANNER_GROUPS.map((_, i) => (
-              <button key={i} onClick={() => setBannerIndex(i)}
-                className={`h-[5px] rounded-full transition-all duration-300 ${i === bannerIndex ? 'w-5 bg-[#c2c2c2]' : 'w-1.5 bg-[#e0e0e0] hover:bg-[#d0d0d0]'}`}
-              />
-            ))}
-          </div>
+        {/* Left/Right arrows */}
+        <button onClick={prevBanner} className="absolute left-0 top-0 bottom-0 w-10 sm:w-14 flex items-center justify-center bg-white/80 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white cursor-pointer" aria-label="Previous banner">
+          <ChevronLeft size={24} />
+        </button>
+        <button onClick={nextBanner} className="absolute right-0 top-0 bottom-0 w-10 sm:w-14 flex items-center justify-center bg-white/80 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white cursor-pointer" aria-label="Next banner">
+          <ChevronRight size={24} />
+        </button>
+
+        {/* Dots */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex space-x-1.5 z-10">
+          {BANNERS.map((_, i) => (
+            <button key={i} onClick={() => setBannerIndex(i)}
+              className={`h-[6px] rounded-full transition-all duration-300 cursor-pointer ${i === bannerIndex ? 'w-5 bg-white' : 'w-[6px] bg-white/50 hover:bg-white/70'}`}
+              aria-label={`Show banner ${i + 1}`}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Main Grid Full Width */}
-      <div className="max-w-[1400px] mx-auto mt-4 px-2 sm:px-4">
-        <section className="w-full bg-white shadow-sm min-h-[600px]">
+      {/* ===== PRODUCT LISTING SECTION ===== */}
+      <div className="fk-container mt-2.5">
+        <section className="w-full bg-white shadow-sm">
           
-          {/* Header Row */}
-          <div className="p-4 border-b flex justify-between items-center bg-white sticky top-14 z-30 shadow-sm border-t">
-            <h2 className="text-[18px] font-medium text-gray-900 flex items-center">
-              {searchQuery ? `Search Results for "${searchQuery}"` : (urlCategory ? `Showing ${urlCategory}` : 'Best of Electronics & More')}
-              {!loading && <span className="text-[14px] font-normal text-gray-500 ml-3 bg-gray-100 px-2 py-0.5 rounded-sm">({products.length} Items)</span>}
+          {/* Sticky header row */}
+          <div className="px-4 py-3 border-b flex justify-between items-center bg-white sticky top-[96px] z-20">
+            <h2 className="text-[18px] font-medium text-[#212121] flex items-center gap-2">
+              {getHeaderText()}
+              {!loading && (
+                <span className="text-[13px] font-normal text-[#878787]">
+                  (Showing 1 - {products.length} of {totalItems || products.length} products)
+                </span>
+              )}
             </h2>
             
             {urlCategory && (
-              <button onClick={clearFilter} className="text-[14px] text-flipkartBlue font-medium hover:underline px-4 py-1.5 border border-flipkartBlue rounded-sm bg-blue-50">
+              <button onClick={clearFilter} className="text-[13px] text-flipkartBlue font-medium hover:underline px-3 py-1.5 border border-flipkartBlue/30 rounded-sm bg-blue-50/50 transition-colors hover:bg-blue-50 cursor-pointer">
                 Clear Filters
               </button>
             )}
           </div>
 
-          {/* Grid Container */}
-          <div className="p-0">
-            {error && <div className="p-6 bg-red-50 text-red-600 text-sm m-4">{error}</div>}
+          {/* Grid */}
+          <div>
+            {error && <div className="p-4 bg-red-50 text-red-600 text-sm m-4 rounded">{error}</div>}
             
             {loading && page === 1 ? (
-              <Loader />
+              <Loader count={15} type="grid" />
             ) : products.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-20 text-gray-400">
-                <img src="https://static-assets-web.flixcart.com/fk-p-linchpin-web/fk-cp-zion/img/error-no-search-results_2353c5.png" alt="no results" className="w-64 mb-6" />
-                <p className="text-2xl font-semibold text-gray-800">Sorry, no results found!</p>
-                <p className="text-gray-500 mt-2 text-sm">Please check the spelling or try searching for something else</p>
+              <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+                <img src="https://static-assets-web.flixcart.com/fk-p-linchpin-web/fk-cp-zion/img/error-no-search-results_2353c5.png" alt="no results" className="w-56 mb-6 opacity-80" />
+                <p className="text-[20px] font-medium text-[#212121] mb-2">Sorry, no results found!</p>
+                <p className="text-[14px] text-[#878787]">Please check the spelling or try searching for something else</p>
               </div>
             ) : (
               <>
-                {/* 5-Column Grid on large screens just like Flipkart */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 divide-x divide-y border-t border-l">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 divide-x divide-y divide-[#f0f0f0]">
                   {products.map((product, idx) => (
-                    <div key={product._id || idx} className="border-b border-r bg-white hover:z-10 relative">
+                    <div key={product._id || idx} className="bg-white">
                       <ProductCard product={product} />
                     </div>
                   ))}
                 </div>
 
                 {hasMore && (
-                  <div className="mt-8 mb-8 flex justify-center">
+                  <div className="py-6 flex justify-center border-t">
                     <button
                       onClick={() => setPage(p => p + 1)}
                       disabled={loading}
-                      className="px-10 py-3 bg-flipkartBlue text-white shadow-sm font-semibold rounded-sm tracking-wide text-[14px] hover:bg-blue-600 uppercase transition-colors"
+                      className="px-10 py-3 bg-flipkartBlue text-white font-medium rounded-sm text-[14px] hover:bg-blue-600 uppercase tracking-wide transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
                     >
-                      {loading ? 'Loading...' : 'Load More'}
+                      {loading ? 'Loading...' : 'Load More Products'}
                     </button>
                   </div>
                 )}
