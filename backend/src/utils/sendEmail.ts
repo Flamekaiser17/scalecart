@@ -45,8 +45,9 @@ const sendEmail = async (options: SendEmailOptions): Promise<void> => {
 interface OrderEmailData {
   orderId: string;
   totalAmount: number;
-  itemCount: number;
+  itemCount?: number;
   shippingAddress?: string;
+  paymentId?: string;
 }
 
 export const sendOrderConfirmationEmail = async (

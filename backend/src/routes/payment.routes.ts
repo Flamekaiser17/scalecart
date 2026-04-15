@@ -11,11 +11,11 @@ const router = Router();
 
 router.use(verifyJWT);
 
-router.post("/create-order", createRazorpayOrder);
-router.post("/verify", verifyPayment);
-router.get("/status/:orderId", getPaymentStatus);
+router.post("/create-order", createRazorpayOrder as any);
+router.post("/verify", verifyPayment as any);
+router.get("/status/:orderId", getPaymentStatus as any);
 
 // DEV ONLY — generates a valid HMAC signature for Postman testing
-router.post("/simulate", simulatePayment);
+router.post("/simulate", simulatePayment as any);
 
 export default router;
