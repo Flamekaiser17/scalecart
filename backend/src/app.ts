@@ -1,4 +1,4 @@
-import express, { Express } from "express";
+import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 //import session from "express-session";
@@ -18,9 +18,26 @@ import paymentRoutes from './routes/payment.routes.js';
 
 const app: Express = express();
 
+// ─── CORS: Allow localhost + production + Vercel preview URLs ─────────────────
+const allowedOrigins = [
+    "http://localhost:5173",
+    "https://scalecart.vercel.app",
+];
+
 app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+        // Allow exact matches + any Vercel preview deployment
+        if (
+            allowedOrigins.includes(origin) ||
+            origin.endsWith(".vercel.app")
+        ) {
+            return callback(null, origin);
+        }
+        return callback(new Error(`CORS blocked: ${origin}`));
+    },
+    credentials: true,
 }));
 
 app.use(express.json({ limit: "4mb" }));
@@ -55,6 +72,15 @@ app.use("/api/v1/payments", paymentRoutes);
 
 //app.use("/api/v1/auth", authRouter);
 
-//http://localhost:8000/api/v1/users/register
+// ─── Global Error Handler (catches all asyncHandler / next(err) errors) ──────
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+        success: false,
+        statusCode,
+        message: err.message || "Internal Server Error",
+        errors: err.errors || [],
+    });
+});
 
 export { app }; 
