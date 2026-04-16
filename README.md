@@ -1,6 +1,5 @@
 <div align="center">
   <img src="https://static-assets-web.flixcart.com/fk-p-linchpin-web/fk-cp-zion/img/flipkart-plus_8d85f4.png" alt="ScaleCart Logo" width="150" />
-  <h1>ScaleCart</h1>
   <p><strong>A Production-Grade E-Commerce Platform · Flipkart-Inspired Architecture</strong></p>
   
   [![Live Demo](https://img.shields.io/badge/Live-scalecart.vercel.app-blue?style=flat-square&logo=vercel)](https://scalecart.vercel.app)
